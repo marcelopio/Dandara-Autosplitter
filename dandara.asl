@@ -57,11 +57,11 @@ startup {
 	AddEventSplit(0x36, "Boss_Kill_5", false, "");
 	AddEventSplit(0x37, "Boss_Kill_6", true, "Killed Eldar tv form");
 	AddEventSplit(0x38, "Boss_Kill_7", false, "");
-	AddEventSplit(0x39, "Miniboss_Kill_1", false, "Killed tank");
+	AddEventSplit(0x39, "Miniboss_Kill_1", true, "Killed tank");
 	AddEventSplit(0x3A, "Miniboss_Kill_2", false, "");
 	AddEventSplit(0x3B, "Miniboss_Kill_3", false, "");
 	AddEventSplit(0x3C, "Miniboss_Kill_4", false, "");
-	AddEventSplit(0x64, "PU_Stone_Creation", true, "Got stone of creation");
+	AddEventSplit(0x64, "PU_Stone_Creation", false, "Got stone of creation");
 	AddEventSplit(0x65, "PU_Stone_Remembrance", true, "Got rock of Remembrance");
 	AddEventSplit(0x66, "PU_Stone_Intention", true, "Got stone of Intention");
 	AddEventSplit(0x67, "PU_Stone_Dreams", true, "Got pearl of dreams");
