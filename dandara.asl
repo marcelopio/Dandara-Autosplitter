@@ -1,10 +1,11 @@
 state("Dandara")
 {
-	float playedTime : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xbc;
-	//string255 currentRoomNameID : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xa8, 0xc;
-	string255 currentScene : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xac, 0xc;
-	string255 baseCampScene : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xb8, 0xc;
-	byte isTransitioning : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xd5;
+	float playedTime : "UnityPlayer.dll", 0x00193FD4, 0x30, 0x190, 0x8, 0x54, 0x7b8, 0x8, 0x4c;
+	//string255 currentRoomNameID : "UnityPlayer.dll", 0x00193FD4, 0x30, 0x190, 0x8, 0x54, 0x7b8, 0x8, 0x38, 0xc;
+	string255 currentScene : "UnityPlayer.dll", 0x00193FD4, 0x30, 0x190, 0x8, 0x54, 0x7b8, 0x8, 0x3c, 0xc;
+	string255 baseCampScene : "UnityPlayer.dll", 0x00193FD4, 0x30, 0x190, 0x8, 0x54, 0x7b8, 0x8, 0x48, 0xc;
+	byte isTransitioning : "UnityPlayer.dll", 0x00193FD4, 0x30, 0x190, 0x8, 0x54, 0x7b8, 0x8, 0x65;
+	
 	int storyManager : "UnityPlayer.dll", 0x0107DD14, 0xa8, 0x4, 0x8c, 0x54, 0x290, 0x10;
 	int ocurredEvents : "UnityPlayer.dll", 0x0107DD14, 0xa8, 0x4, 0x8c, 0x54, 0x290, 0x10, 0x10;
 	int arrayEvents : "UnityPlayer.dll", 0x0107DD14, 0xa8, 0x4, 0x8c, 0x54, 0x290, 0x10, 0x10, 0x10;
@@ -39,9 +40,9 @@ startup {
 	settings.Add("split_saved_camp", false, "Split on current camp name");
 	
 	AddEventSplit(0x1, "Started", false, "Game started");
-	AddEventSplit(0x2, "Ended", false, "");
+	AddEventSplit(0x2, "Ended", false, "Killed Eldar 1 hit form");
 	AddEventSplit(0x3, "OpenedEldarDoor", false, "");
-	AddEventSplit(0x4, "OpenedFirstWeaponChest", false, "");
+	AddEventSplit(0x4, "OpenedFirstWeaponChest", false, "Got first arrow of freedom");
 	AddEventSplit(0x5, "DLCF_EntranceAccessUnlocked", false, "");
 	AddEventSplit(0x6, "DLCF_FacedTheMasters", false, "");
 	AddEventSplit(0x7, "DLCF_FreedNara", false, "");
@@ -54,7 +55,7 @@ startup {
 	AddEventSplit(0x34, "Boss_Kill_3", false, "");
 	AddEventSplit(0x35, "Boss_Kill_4", false, "");
 	AddEventSplit(0x36, "Boss_Kill_5", false, "");
-	AddEventSplit(0x37, "Boss_Kill_6", false, "Killed Eldar");
+	AddEventSplit(0x37, "Boss_Kill_6", false, "Killed Eldar tv form");
 	AddEventSplit(0x38, "Boss_Kill_7", false, "");
 	AddEventSplit(0x39, "Miniboss_Kill_1", false, "Killed tank");
 	AddEventSplit(0x3A, "Miniboss_Kill_2", false, "");
@@ -168,7 +169,7 @@ split {
 	var split = false;
 	
 	foreach (int storyEvent in vars.currentStoryEvents){
-		split = split || (settings[vars.storyEventDictionary[storyEvent]] && !vars.oldStoryEvents.Contains(storyEvent));
+		split = split || (settings[vars.storyEventDictionary[storyEvent]] && !vars.oldStoryEvents.Contains(storyEvent));		
 	}
 	
 	if (settings["split_current_scene"] && timer.CurrentSplit.Name == current.currentScene) {
