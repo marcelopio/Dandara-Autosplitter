@@ -14,11 +14,11 @@ state("Dandara", "steam")
 
 state("Dandara", "other")
 {
-    float playedTime : "UnityPlayer.dll", 0x0107E61C, 0x0, 0x8, 0x54, 0x798, 0x10, 0x4c;
-    //string255 currentRoomNameID :"UnityPlayer.dll", 0x0107E61C, 0x0, 0x8, 0x54, 0x798, 0x10, 0x38, 0xc;
-    string255 currentScene : "UnityPlayer.dll", 0x0107E61C, 0x0, 0x8, 0x54, 0x798, 0x10, 0x3c, 0xc;
-    string255 baseCampScene : "UnityPlayer.dll", 0x0107E61C, 0x0, 0x8, 0x54, 0x798, 0x10, 0x48, 0xc;
-    byte isTransitioning : "UnityPlayer.dll", 0x0107E61C, 0x0, 0x8, 0x54, 0x798, 0x10, 0x65;
+    float playedTime : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xbc;
+    //string255 currentRoomNameID : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xa8, 0xc;
+    string255 currentScene : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xac, 0xc;
+    string255 baseCampScene : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xb8, 0xc;
+    byte isTransitioning : "UnityPlayer.dll", 0x010A0DF8, 0x4, 0x8, 0x1c, 0x64, 0xb4, 0x3c, 0xd5;
     
     int storyManager : "UnityPlayer.dll", 0x0107DD14, 0xa8, 0x4, 0x8c, 0x54, 0x290, 0x10;
     int ocurredEvents : "UnityPlayer.dll", 0x0107DD14, 0xa8, 0x4, 0x8c, 0x54, 0x290, 0x10, 0x10;
@@ -65,9 +65,11 @@ startup {
     settings.Add("split_current_scene", true, "Split on current scene name");
     settings.Add("split_saved_camp", false, "Split on current camp name, does not work with current scene enabled");
     
+    //Thanks johno for theses descriptions
+    
     AddEventSplit(0x1, "Started", false, "Game started");
-    AddEventSplit(0x2, "Ended", true, "Killed Eldar 1 hit form");
-    AddEventSplit(0x3, "OpenedEldarDoor", false, "");
+    AddEventSplit(0x2, "Ended", true, "Started credits");
+    AddEventSplit(0x3, "OpenedEldarDoor", false, "Hit lever in Guardhouse");
     AddEventSplit(0x4, "OpenedFirstWeaponChest", true, "Got first arrow of freedom");
     AddEventSplit(0x5, "DLCF_EntranceAccessUnlocked", false, "");
     AddEventSplit(0x6, "DLCF_FacedTheMasters", false, "");
@@ -84,8 +86,8 @@ startup {
     AddEventSplit(0x37, "Boss_Kill_6", true, "Killed Eldar tv form");
     AddEventSplit(0x38, "Boss_Kill_7", false, "");
     AddEventSplit(0x39, "Miniboss_Kill_1", true, "Killed tank");
-    AddEventSplit(0x3A, "Miniboss_Kill_2", false, "");
-    AddEventSplit(0x3B, "Miniboss_Kill_3", false, "");
+    AddEventSplit(0x3A, "Miniboss_Kill_2", false, "Killed rock of remembrance guardian");
+    AddEventSplit(0x3B, "Miniboss_Kill_3", false, "Killed stone of intention guardian");
     AddEventSplit(0x3C, "Miniboss_Kill_4", false, "");
     AddEventSplit(0x64, "PU_Stone_Creation", false, "Got stone of creation");
     AddEventSplit(0x65, "PU_Stone_Remembrance", true, "Got rock of Remembrance");
@@ -93,16 +95,16 @@ startup {
     AddEventSplit(0x67, "PU_Stone_Dreams", true, "Got pearl of dreams");
     AddEventSplit(0x6C, "PU_DLCF_FinalKey", false, "");
     AddEventSplit(0x6E, "PU_Health", false, "");
-    AddEventSplit(0x6F, "PU_Ammo", false, "");
+    AddEventSplit(0x6F, "PU_Ammo", false, "Got first weapon");
     AddEventSplit(0x70, "PU_HealthFlask", true, "Got first health flask");
     AddEventSplit(0x71, "PU_Map", false, "Got map");
     AddEventSplit(0x72, "PU_Shield", false, "");
-    AddEventSplit(0x73, "PU_ManaFlask", false, "");
+    AddEventSplit(0x73, "PU_ManaFlask", false, "Got first mana flask");
     AddEventSplit(0x74, "PU_HealthFlaskUpgrade", false, "Got first health flask");
-    AddEventSplit(0x75, "PU_ManaFlaskUpgrade", false, "");
+    AddEventSplit(0x75, "PU_ManaFlaskUpgrade", false, "Got first mana flask");
     AddEventSplit(0x76, "PU_Money", false, "");
     AddEventSplit(0x77, "PU_DandaraArrow", false, "");
-    AddEventSplit(0x78, "PU_ManaWeapon", false, "");
+    AddEventSplit(0x78, "PU_ManaWeapon", false, "Got first weapon");
     AddEventSplit(0x79, "PU_Money_Fear", false, "");
     AddEventSplit(0x7A, "PU_SuperDandara", false, "");
     AddEventSplit(0x7B, "PU_FearWeapon", false, "");
@@ -115,10 +117,10 @@ startup {
     AddEventSplit(0x9C, "Weapon_WaterBomb", false, "");
     AddEventSplit(0x9D, "Weapon_Teleport", false, "");
     AddEventSplit(0x9E, "Weapon_Firewall", false, "");
-    AddEventSplit(0xC8, "D_Painter", false, "Encountered the painter");
-    AddEventSplit(0xC9, "D_Musician", false, "Encountered the musician");
-    AddEventSplit(0xCA, "D_CreatGuardBridge", false, "");
-    AddEventSplit(0xCB, "D_Eldar1", false, "");
+    AddEventSplit(0xC8, "D_Painter", false, Activated painter");
+    AddEventSplit(0xC9, "D_Musician", false, "Activated musician");
+    AddEventSplit(0xCA, "D_CreatGuardBridge", false, "Talked to Lazuli at bridge");
+    AddEventSplit(0xCB, "D_Eldar1", false, "Talked to Eldar 1");
     AddEventSplit(0xCC, "D_DLCF_MastersIntroduction", false, "");
     AddEventSplit(0xCD, "D_DLCF_ExplorerFinish", false, "");
     AddEventSplit(0xCE, "D_DLCF_NobleFinish", false, "");
@@ -128,25 +130,25 @@ startup {
     AddEventSplit(0xD2, "D_DLCF_PersistentStart", false, "");
     AddEventSplit(0xFA, "HUD_Unlock", false, "");
     AddEventSplit(0xFB, "HUD_TutorialClear", false, "");
-    AddEventSplit(0x12C, "Char_Painter", false, "");
-    AddEventSplit(0x12D, "Char_Musician", false, "");
-    AddEventSplit(0x12E, "Char_GameDev", false, "");
-    AddEventSplit(0x12F, "Char_Boss1_NoName", false, "");
-    AddEventSplit(0x130, "Char_A1Boss", false, "Entered Augustus room");
+    AddEventSplit(0x12C, "Char_Painter", false, "Talked to painter");
+    AddEventSplit(0x12D, "Char_Musician", false, "Talked to musician");
+    AddEventSplit(0x12E, "Char_GameDev", false, "Talked to Jhonny");
+    AddEventSplit(0x12F, "Char_Boss1_NoName", false, "Discovered first camp");
+    AddEventSplit(0x130, "Char_A1Boss", false, "Started Augustus fight");
     AddEventSplit(0x131, "Char_A2Boss", false, "");
     AddEventSplit(0x132, "Char_Writer", false, "");
-    AddEventSplit(0x133, "Char_AFBoss1", false, "");
-    AddEventSplit(0x134, "Char_AFBoss2", false, "");
+    AddEventSplit(0x133, "Char_AFBoss1", false, "Talked to Eldar 1");
+    AddEventSplit(0x134, "Char_AFBoss2", false, "Started Eldar 2");
     AddEventSplit(0x135, "Char_HeartCourage", false, "");
     AddEventSplit(0x136, "Char_DLCF_Boss", false, "");
     AddEventSplit(0x137, "Char_DLCF_Explorer", false, "");
     AddEventSplit(0x138, "Char_DLCF_Noble", false, "");
     AddEventSplit(0x139, "Char_DLCF_Persistent", false, "");
-    AddEventSplit(0x13A, "Char_Lazuli", false, "");
+    AddEventSplit(0x13A, "Char_Lazuli", false, "Talked to Lazuli at Stone of Creation");
     AddEventSplit(0x13B, "Char_Lazuli_NoName", false, "");
     AddEventSplit(0x13C, "Char_DLCF_Nara", false, "");
     AddEventSplit(0x13D, "Char_DLCF_ElderDandara", false, "");
-    AddEventSplit(0x1F4, "Cutscene_FavelaHUB", false, "");
+    AddEventSplit(0x1F4, "Cutscene_FavelaHUB", false, "Augustus door shake cutscene");
     AddEventSplit(0x1F5, "Cutscene_CampDiscovery", false, "");
 }
 
