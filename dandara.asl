@@ -152,12 +152,12 @@ startup {
 
 init
 {
-	if (modules.Any(m => m.ModuleName == "steamclient.dll")){
-		version = "steam";		
-	} else {
-		version = "other";
-	}
-	print("Version "+version);
+    if (modules.Any(m => m.ModuleName == "steamclient.dll")){
+        version = "steam";        
+    } else {
+        version = "other";
+    }
+    print("Version "+version);
 }
 
 gameTime
@@ -173,7 +173,7 @@ isLoading
 }
 
 start {
-    if (current.playedTime > 0.0 && old.playedTime == 0.0) {
+    if (current.playedTime > 0.0 && old.playedTime == 0.0 && current.currentScene == "A1_Void4") {
         print("Start");        
         return true;
     } 
@@ -201,7 +201,14 @@ split {
     var split = false;
     
     foreach (int storyEvent in vars.currentStoryEvents){
+        if (!vars.oldStoryEvents.Contains(storyEvent)){
+            print("Event occurred: "+vars.storyEventDictionary[storyEvent]);
+        }
         split = split || (settings[vars.storyEventDictionary[storyEvent]] && !vars.oldStoryEvents.Contains(storyEvent));
+    }
+    
+    if (current.currentScene != old.currentScene) {
+        print("Current scene:"+current.currentScene);
     }
     
     if (settings["split_current_scene"] && timer.CurrentSplit.Name == current.currentScene) {
