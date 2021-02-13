@@ -117,7 +117,7 @@ startup {
     AddEventSplit(0x9C, "Weapon_WaterBomb", false, "");
     AddEventSplit(0x9D, "Weapon_Teleport", false, "");
     AddEventSplit(0x9E, "Weapon_Firewall", false, "");
-    AddEventSplit(0xC8, "D_Painter", false, Activated painter");
+    AddEventSplit(0xC8, "D_Painter", false, "Activated painter");
     AddEventSplit(0xC9, "D_Musician", false, "Activated musician");
     AddEventSplit(0xCA, "D_CreatGuardBridge", false, "Talked to Lazuli at bridge");
     AddEventSplit(0xCB, "D_Eldar1", false, "Talked to Eldar 1");
