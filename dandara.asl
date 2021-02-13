@@ -28,7 +28,7 @@ state("Dandara", "other")
 
 
 startup {
-    
+    vars.aslName = "Dandara";
     if(timer.CurrentTimingMethod == TimingMethod.RealTime){
         
         var timingMessage = MessageBox.Show(
