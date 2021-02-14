@@ -44,6 +44,7 @@ startup {
     
     vars.ResetVars = (Action)(() => {
         vars.currentStoryEvents = new HashSet<int>();
+        vars.currentScenes = new HashSet<string>();
     });
     
     vars.ResetVars();
@@ -55,12 +56,21 @@ startup {
     
     vars.storyEventDictionary = new Dictionary<int, string>();
     Action<int, string, bool, string> AddEventSplit = (key, name, active, description) => {
-        settings.Add(name, active, name, "event");
+        if(description == string.Empty)
+          description = "Unknown event";
+        settings.Add(name, active, description + " (" + name + ")", "event");
         settings.SetToolTip(name, description);
         vars.storyEventDictionary[key] = name;
     };
-    
-    settings.Add("event", true, "event");
+
+    vars.sceneDictionary = new Dictionary<int, string>();
+    Action<int, string, bool, string> AddSceneSplit = (key, name, active, description) => {
+        settings.Add(name, active, description + " (" + name + ")", "scene");
+        vars.sceneDictionary[key] = name;
+    };
+
+    settings.Add("event", true, "Events");
+    settings.Add("scene", true, "Scenes");
     settings.Add("remove_loading", false, "Remove Loading");
     settings.Add("split_current_scene", true, "Split on current scene name");
     settings.Add("split_saved_camp", false, "Split on current camp name, does not work with current scene enabled");
@@ -150,6 +160,97 @@ startup {
     AddEventSplit(0x13D, "Char_DLCF_ElderDandara", false, "");
     AddEventSplit(0x1F4, "Cutscene_FavelaHUB", false, "Augustus door shake cutscene");
     AddEventSplit(0x1F5, "Cutscene_CampDiscovery", false, "");
+
+    AddSceneSplit(0x301, "A1_GreatRuins", false, "Crib of Creation");
+    AddSceneSplit(0x302, "A1_ForestEdge", false, "Creation Meadow");
+    AddSceneSplit(0x303, "A1_CityEntrance", false, "Side Gate");
+    AddSceneSplit(0x304, "A1_FavelaHub", false, "The Village Center");
+    AddSceneSplit(0x305, "A1_PainterPath1", false, "Paint Well");
+    AddSceneSplit(0x306, "A1_PainterPath2", false, "Abandoned House");
+    AddSceneSplit(0x307, "A1_PainterPath3", false, "Community Street");
+    AddSceneSplit(0x308, "A1_PainterPath4", false, "The Rich and the Poor");
+    AddSceneSplit(0x309, "A1_PainterHouse", false, "Tarsila's House");
+    AddSceneSplit(0x30A, "A1_PainterExit1", false, "Backyard");
+    AddSceneSplit(0x30B, "A1_PainterExit2", false, "Sewers");
+    AddSceneSplit(0x30C, "A1_GameDesigner1", false, "The Big Walk");
+    AddSceneSplit(0x30D, "A1_AvenueEast", false, "Main Avenue");
+    AddSceneSplit(0x30E, "A1_Market", false, "Central Market");
+    AddSceneSplit(0x30F, "A1_MusicianPath4", false, "Piano Alley");
+    AddSceneSplit(0x310, "A1_AvenueEastTurn", false, "Corner's Club");
+    AddSceneSplit(0x311, "A1_MinibossAvenue", false, "Beautiful Horizon Avenue");
+    AddSceneSplit(0x312, "A1_MusicianHouse", false, "Thommaz's House");
+    AddSceneSplit(0x313, "A1_GD2", false, "Theater Arena");
+    AddSceneSplit(0x314, "A1_GD3", false, "One-way Street");
+    AddSceneSplit(0x315, "A1_GD10", false, "Writer's Flow");
+    AddSceneSplit(0x316, "A1_GD11", false, "Dancing Triplets");
+    AddSceneSplit(0x317, "A1_GD12", false, "Mind Cross");
+    AddSceneSplit(0x318, "A1_GD8", false, "The Dalvian Star");
+    AddSceneSplit(0x319, "A1_GD4", false, "Buritis");
+    AddSceneSplit(0x31A, "A1_GD13", false, "Corral Mountain Range");
+    AddSceneSplit(0x31B, "A1_GD14", false, "Jonny B. Cave");
+    AddSceneSplit(0x31C, "A1_GD15", false, "Concrete Cave");
+    AddSceneSplit(0x31D, "A1_PreBoss", false, "Temple of Creation");
+    AddSceneSplit(0x31E, "A1_BossFightRoom", false, "Temple of Creation");
+    AddSceneSplit(0x31F, "A1_CreationStoneRoom", false, "Temple of Creation");
+    AddSceneSplit(0x320, "A1_CityMainEntrance", false, "Main Gate");
+    AddSceneSplit(0x321, "A1_BridgePath", false, "Village Outskirts");
+    AddSceneSplit(0x322, "AB_Backtrack4", false, "Confusion Ruins");
+    AddSceneSplit(0x323, "AB_Bridge", false, "The Colossal Bridge");
+    AddSceneSplit(0x324, "AB_ToFieldCamp1", false, "The Traveler's Corridor");
+    AddSceneSplit(0x325, "AB_FieldCamp", false, "Capital Outskirts");
+    AddSceneSplit(0x326, "AB_ToDesert1", false, "Forest of Encoders");
+    AddSceneSplit(0x327, "AB_ToDesert2", false, "Hoarders Woods");
+    AddSceneSplit(0x328, "AB_ToDesert3", false, "Reclamation Grove");
+    AddSceneSplit(0x329, "A2_Boss", false, "Overcast Gate Ruins");
+    AddSceneSplit(0x32A, "A2_DesertJumper", false, "Corridor of Conscious Recollections");
+    AddSceneSplit(0x32B, "A2_DesertCamp", false, "View of Solitude");
+    AddSceneSplit(0x32C, "A2_DesertCrawler1", false, "The Wanderer Archives");
+    AddSceneSplit(0x32D, "A2_Lotus", false, "The Drifter Archives");
+    AddSceneSplit(0x32E, "A2_RBPlatformTutorial", false, "Eldarian Army Outpost");
+    AddSceneSplit(0x32F, "A2_LotusCorridor", false, "Main Warehouse");
+    AddSceneSplit(0x330, "A2_AnteChamberUpRight", false, "Archive of the Regretful");
+    AddSceneSplit(0x331, "A2_ToInsideShortcut", false, "Museum Main Hall");
+    AddSceneSplit(0x332, "A2_ToInside3", false, "Auditorium");
+    AddSceneSplit(0x333, "A2_ToInside4", false, "Overburden Deposits");
+    AddSceneSplit(0x334, "A2_ToInside5", false, "Museum Side Entrance");
+    AddSceneSplit(0x335, "A2_Threeway", false, "C for Curiosity and Creation");
+    AddSceneSplit(0x336, "A2_DesertAdvancedCamp", false, "Kid's Lecture House");
+    AddSceneSplit(0x337, "A2_BeforeWriter", false, "Tower Stairway");
+    AddSceneSplit(0x338, "A2_WriterRoom", false, "The Tower");
+    AddSceneSplit(0x339, "A2_BarrierMiniboss", false, "Writer's Lone Balcony");
+    AddSceneSplit(0x33A, "A2_RemembranceStoneAltar", false, "Remembrance Cliff");
+    AddSceneSplit(0x33B, "A2_ToOutside1", false, "F for Findings and Fun");
+    AddSceneSplit(0x33C, "A2_RemembranceWeaponRoom", false, "Quarter of a Distant Love");
+    AddSceneSplit(0x33D, "A2_DesertCrawler3", false, "B for Bruises and Betweens");
+    AddSceneSplit(0x33E, "A2_ToOutside2", false, "Corner of the Unasked Question");
+    AddSceneSplit(0x33F, "A2_ToInside1", false, "S for Smiles and Scars");
+    AddSceneSplit(0x340, "A2_ToRemembranceWeapon", false, "Remember Good Moments");
+    AddSceneSplit(0x341, "AB_ToAF", false, "Corruption Transform");
+    AddSceneSplit(0x342, "AF_4", false, "The Golden Threat");
+    AddSceneSplit(0x343, "AF_5", false, "The Golden Pride");
+    AddSceneSplit(0x344, "AF_FinalCamp", false, "Eldarian Gates");
+    AddSceneSplit(0x345, "AF_6", false, "The Golden Honor");
+    AddSceneSplit(0x346, "AF_7", false, "The Golden Menace");
+    AddSceneSplit(0x347, "A3_Camp", false, "Reasoning Lock");
+    AddSceneSplit(0x348, "A3_ToIntention1", false, "Logical Path");
+    AddSceneSplit(0x349, "AF_8", false, "The Golden Walkway");
+    AddSceneSplit(0x34A, "AF_9", false, "The Golden Storage");
+    AddSceneSplit(0x34B, "A3_ToIntention2", false, "Intention Square");
+    AddSceneSplit(0x34C, "A3_CribOfIntention", false, "Crib of Intention");
+    AddSceneSplit(0x34D, "AB_Backtrack1", false, "Limits of Sanity");
+    AddSceneSplit(0x34E, "AF_3", false, "The Golden Path");
+    AddSceneSplit(0x34F, "AF_2", false, "The Golden Weaponry");
+    AddSceneSplit(0x350, "AF_1", false, "The Breach in the Wall");
+    AddSceneSplit(0x351, "A3_CityEntrance", false, "Capital Entrance");
+    AddSceneSplit(0x352, "A3_Back7", false, "Side Turn");
+    AddSceneSplit(0x353, "A4_Entrance", false, "View of the Deep");
+    AddSceneSplit(0x354, "A4_Circle", false, "Dream Lands (Circle)");
+    AddSceneSplit(0x355, "A4_DreamStone", false, "Dream Lands (Camp)");
+    AddSceneSplit(0x356, "AF_12", false, "The Golden Angle");
+    AddSceneSplit(0x357, "AF_MainRoom", false, "Path to Great Fortune");
+    AddSceneSplit(0x358, "AF_D1", false, "ID Control");
+    AddSceneSplit(0x359, "AF_D4", false, "Guardhouse");
+    AddSceneSplit(0x35A, "AF_Boss", false, "Control Chamber");
 }
 
 init
@@ -198,6 +299,12 @@ update {
         
         vars.currentStoryEvents.Add(storyEvent);
     }    
+
+    vars.oldScenes = vars.currentScenes;
+    if(!vars.currentScenes.Contains(current.currentScene)){
+        vars.currentScenes = new HashSet<string>(vars.oldScenes);
+        vars.currentScenes.Add(current.currentScene);
+    }
 }
 
 split {
@@ -212,6 +319,9 @@ split {
     
     if (current.currentScene != old.currentScene) {
         print("Current scene:"+current.currentScene);
+        if(!vars.oldScenes.Contains(current.currentScene)){
+            split = split || settings[current.currentScene];
+        }
     }
     
     if (settings["split_current_scene"] && timer.CurrentSplit.Name.Contains(current.currentScene)) {
