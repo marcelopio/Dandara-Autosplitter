@@ -45,6 +45,7 @@ startup {
     vars.ResetVars = (Action)(() => {
         vars.currentStoryEvents = new HashSet<int>();
         vars.currentScenes = new HashSet<string>();
+        vars.startCreditsTime = 0;
     });
     
     vars.ResetVars();
@@ -74,8 +75,9 @@ startup {
     settings.Add("remove_loading", false, "Remove Loading");
     settings.Add("split_current_scene", true, "Split on current scene name");
     settings.Add("split_saved_camp", false, "Split on current camp name, does not work with current scene enabled");
+    settings.Add("split_end_credits", false, "Try to split on end credits, exactly 25s after credits start");
     
-    //Thanks johno for theses descriptions
+    //Thanks johno for these descriptions
     
     AddEventSplit(0x1, "Started", false, "Game started");
     AddEventSplit(0x2, "Ended", true, "Started credits");
@@ -317,8 +319,12 @@ split {
     foreach (int storyEvent in vars.currentStoryEvents){
         if (!vars.oldStoryEvents.Contains(storyEvent)){
             print("Event occurred: "+vars.storyEventDictionary[storyEvent]);
+            split = split || settings[vars.storyEventDictionary[storyEvent]];
+            
+            if (settings["split_end_credits"] && storyEvent == 0x2) {
+                vars.startCreditsTime = current.playedTime;
+            }            
         }
-        split = split || (settings[vars.storyEventDictionary[storyEvent]] && !vars.oldStoryEvents.Contains(storyEvent));
     }
     
     if (current.currentScene != old.currentScene) {
@@ -333,6 +339,10 @@ split {
     }
     
     if (settings["split_saved_camp"] && timer.CurrentSplit.Name == current.baseCampScene) {
+        split = true;
+    }
+    
+    if (settings["split_end_credits"] && vars.startCreditsTime > 0 && (current.playedTime - vars.startCreditsTime) > 25) {
         split = true;
     }
 
