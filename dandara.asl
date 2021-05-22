@@ -277,20 +277,24 @@ isLoading
 }
 
 start {
-    if (current.playedTime > 0.0 && old.playedTime == 0.0 && current.currentScene == "A1_Void4") {
+    if (current.playedTime > 0.0 && current.currentScene == "A1_Void4") {
         print("Start");        
         return true;
     } 
 }
 
 reset {
-    if (old.playedTime > 0.0 && current.playedTime == 0.0) {
+    if (current.playedTime < 1.0 && old.playedTime == 0.0 && current.currentScene == "A1_Void4") {
         print("Reset");
         return true;
     } 
 }
 
 update {
+    if (current.currentScene == null) {
+        return false;
+    }
+
     vars.oldStoryEvents = vars.currentStoryEvents;
     vars.currentStoryEvents = new HashSet<int>(vars.oldStoryEvents);
     
