@@ -130,13 +130,11 @@ async fn main() {
 
                         // Check scene changes
                         if let Some(scene) = &watchers.current_scene.pair {
-                            if scene.changed() {
-                                if !vars.current_scenes.contains(&scene.current) {
-                                    print_message(&format!("Scene: {}", scene.current));
-                                    vars.current_scenes.push(scene.current.clone());
-                                    should_split = should_split
-                                        || settings.get_scene_enabled(scene.current.as_str());
-                                }
+                            if scene.changed() && !vars.current_scenes.contains(&scene.current) {
+                                print_message(&format!("Scene: {}", scene.current));
+                                vars.current_scenes.push(scene.current.clone());
+                                should_split = should_split
+                                    || settings.get_scene_enabled(scene.current.as_str());
                             }
                         }
 
@@ -327,10 +325,10 @@ fn deref_offsets<T: bytemuck::CheckedBitPattern>(
 }
 
 fn read_unity_string(process: &Process, base: Address, offsets: &[u64]) -> String {
-    return match process.read_pointer_path::<ArrayWString<128>>(base, PointerSize::Bit32, offsets) {
+    match process.read_pointer_path::<ArrayWString<128>>(base, PointerSize::Bit32, offsets) {
         Ok(array_str) => String::from_utf16(array_str.as_slice()).ok().unwrap(),
         Err(_) => "".to_string(),
-    };
+    }
 }
 
 fn read_story_events(process: &Process, num_events: i32) -> Vec<i32> {
