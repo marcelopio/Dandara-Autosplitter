@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug Auto Splitter",
+      // Install the asr-debugger with:
+      // cargo install --locked --git https://github.com/LiveSplit/asr-debugger
+      "program": "${env:HOME}/.cargo/bin/asr-debugger",
+      "args": [
+        "--debug",
+        "target/wasm32-unknown-unknown/debug/dandara_asr.wasm"
+      ],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build Auto Splitter (Debug)"
+    }
+  ]
+}
