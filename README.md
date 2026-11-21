@@ -1,6 +1,6 @@
 # dandara-asr
 
-An auto splitter for Dandara.x86 64.
+An auto splitter for Dandara (Windows build, also under Proton), using the Unity/Mono helpers of the `asr` crate.
 
 ## Compilation
 
