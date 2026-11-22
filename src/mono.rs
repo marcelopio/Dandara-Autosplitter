@@ -298,7 +298,7 @@ impl Singleton {
         // `_instance` is the only static field of both singleton bases, so 0
         // is also tried in case the inflated class has no usable field info.
         let looked_up = parent.field_offset(process, "_instance");
-        let fields = [looked_up, Some(0).filter(|_| looked_up != Some(0))];
+        let fields = [looked_up, (looked_up != Some(0)).then_some(0)];
         let runtime_info = p.read_ptr(process, parent.address + parent.layout.runtime_info)?;
 
         // MonoClassRuntimeInfo { u16 max_domain; MonoVTable *domain_vtables[] }:
