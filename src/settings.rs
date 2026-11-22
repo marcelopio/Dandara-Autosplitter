@@ -48,10 +48,6 @@ macro_rules! define_settings {
             #[default = false]
             pub split_new_camp: bool,
 
-            /// Split 25 seconds after the credits start
-            #[default = false]
-            pub split_end_credits: bool,
-
             /// Events
             _event_settings: Title,
             $(
@@ -116,9 +112,10 @@ define_settings! {
             #[default = false]
             event_started = 0x1 ("Started"),
 
-            /// Started credits
+            /// Game beaten (final split)
             ///
-            /// Story event Ended (0x2)
+            /// Story event Ended (0x2). Splits when the statistics screen appears
+            /// after the credits, with the completion time it shows.
             #[default = true]
             event_ended = 0x2 ("Ended"),
 

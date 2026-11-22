@@ -1,7 +1,8 @@
-//! LiveSplit auto splitter for Dandara (Unity 2018.4, legacy Mono, 32-bit).
+//! LiveSplit auto splitter for Dandara (Unity 2018.4, legacy Mono).
 //!
 //! Classes and fields are looked up by name in `Assembly-CSharp`, so the same
-//! code works for every store build that ships `mono.dll` (Steam, Epic).
+//! code works for the Windows builds (`Dandara.exe`, 32-bit `mono.dll`; Steam,
+//! Epic, also under Proton) and the 64-bit Linux build (`Dandara.x86_64`).
 //!
 //! Layout (from `Assembly-CSharp.dll`):
 //!
@@ -24,41 +25,74 @@ use asr::{
     time::Duration,
     timer::{self, TimerState},
     watcher::Watcher,
-    Address, Address32, Process,
+    Address, Process,
 };
 
 mod mono;
+mod results_screen;
 mod settings;
 
 use crate::{
-    mono::{field_or, read_ptr, MonoClass, Singleton},
+    mono::{field_or, Detected, MonoClass, Platform, Singleton},
+    results_screen::ResultsScreens,
     settings::Settings,
 };
 
 asr::async_main!(stable);
 
+/// Process names of the builds. `Dandara.x86` (32-bit Linux) is attached to
+/// only to tell the user it isn't supported.
+const PROCESS_NAMES: [&str; 3] = ["Dandara.exe", "Dandara.x86_64", "Dandara.x86"];
+
 /// Scene the game starts in on "New Game".
 const NEW_GAME_SCENE: &str = "A1_Void4";
 /// `StoryEvent.Started`: a new game began.
 const EVENT_STARTED: i32 = 0x1;
-/// `StoryEvent.Ended`: the credits started.
+/// `StoryEvent.Ended`: the game was beaten (the final cutscene ended).
 const EVENT_ENDED: i32 = 0x2;
 /// A new game is recognised while `playedTime` is below this many seconds.
 const NEW_GAME_WINDOW: f32 = 5.0;
-/// Seconds after the credits start at which the optional final split happens.
-const END_CREDITS_DELAY: f32 = 25.0;
+/// Ticks per second; set explicitly since the waits below are in ticks.
+const TICK_RATE: u32 = 120;
+/// How long to wait for `StatisticsManager` to record the completion time
+/// after `Ended` appears before falling back to `playedTime`.
+const COMPLETION_TIME_WAIT_TICKS: u32 = TICK_RATE / 2;
+/// How long to wait, once the statistics screen appears, for the game to
+/// record the time it shows.
+const SCREEN_TIME_WAIT_TICKS: u32 = TICK_RATE / 2;
+/// How long after the game is beaten to give up on ever reading the
+/// statistics screens and split right away.
+const SCREENS_UNREADABLE_WAIT_TICKS: u32 = TICK_RATE / 2;
+/// Split anyway if the statistics screen hasn't appeared this long after
+/// the game is beaten: 10 minutes.
+const RESULTS_SCREEN_TIMEOUT_TICKS: u32 = 10 * 60 * TICK_RATE;
 
 async fn main() {
+    asr::set_tick_rate(f64::from(TICK_RATE));
     let mut settings = Settings::register();
 
     loop {
-        let process = Process::wait_attach("Dandara.exe").await;
-        print_message("Attached to Dandara.exe");
+        let (process, name) = attach().await;
+        print_message(&format!("Attached to {name}"));
 
         process
             .until_closes(async {
+                let platform = loop {
+                    match Platform::detect(&process) {
+                        Some(Detected::Supported(platform)) => break platform,
+                        Some(Detected::Unsupported(what)) => {
+                            print_message(&format!(
+                                "{what} is not supported; on Linux, run Dandara.x86_64"
+                            ));
+                            // Nothing to do until the process closes.
+                            core::future::pending::<()>().await;
+                        }
+                        None => wait_ticks(60).await,
+                    }
+                };
+                print_message(&format!("Build: {}", platform.label));
                 let (module, image) = attach_mono(&process).await;
-                let mut game = Game::attach(&process, &module, &image).await;
+                let mut game = Game::attach(&process, platform, &module, &image).await;
                 let mut state = State::default();
                 let mut run = Run::default();
                 let mut last_timer_state = timer::state();
@@ -67,7 +101,7 @@ async fn main() {
                 loop {
                     settings.update();
                     game.resolve_singletons(&process);
-                    state.update(&process, &game);
+                    state.update(&process, &mut game);
 
                     let timer_state = timer::state();
                     let new_game = new_game.update(&state);
@@ -106,6 +140,12 @@ async fn main() {
                     }
 
                     if timer_state == TimerState::Running && run.should_split(&settings, &state) {
+                        if let Some(time) = run.split_time.take() {
+                            // End on exactly the time the game shows on its statistics screen.
+                            if !settings.remove_loading {
+                                timer::set_game_time(Duration::seconds_f32(time));
+                            }
+                        }
                         timer::split();
                     }
 
@@ -154,6 +194,18 @@ async fn attach_mono(process: &Process) -> (Module, Image) {
     }
 }
 
+async fn attach() -> (Process, &'static str) {
+    loop {
+        let attached = PROCESS_NAMES
+            .into_iter()
+            .find_map(|name| Process::attach(name).map(|process| (process, name)));
+        if let Some(attached) = attached {
+            return attached;
+        }
+        wait_ticks(60).await;
+    }
+}
+
 async fn wait_ticks(n: u32) {
     for _ in 0..n {
         next_tick().await;
@@ -161,92 +213,245 @@ async fn wait_ticks(n: u32) {
 }
 
 /// Field offsets, looked up by name (falling back to the ASL's values).
-/// All but `occurred_events` are relative to the `GameManager` instance.
+/// All but `occurred_events` and `completion_time` are relative to the
+/// `GameManager` instance.
 struct Offsets {
     is_transitioning: u64,
     played_time: u64,
     current_scene: u64,
     base_camp_scene: u64,
     occurred_events: u64,
+    /// `StatisticsManager._state.lastRunState.time`: the completion time the
+    /// game shows after the credits.
+    completion_time: Option<u64>,
+}
+
+/// The game classes the offsets are looked up in.
+struct Classes {
+    game_manager: MonoClass,
+    game_state: MonoClass,
+    story_manager: MonoClass,
+    statistics_manager: MonoClass,
+}
+
+/// A singleton class and, once it has been validated, its `_instance` slot.
+struct Manager {
+    class: MonoClass,
+    singleton: Option<Singleton>,
+}
+
+impl Manager {
+    fn new(class: MonoClass) -> Self {
+        Self {
+            class,
+            singleton: None,
+        }
+    }
+
+    fn resolve(&mut self, process: &Process) {
+        if self.singleton.is_none() {
+            self.singleton = Singleton::resolve(process, &self.class);
+        }
+    }
+
+    /// The current instance, or `None` while unresolved or null.
+    fn instance(&self, process: &Process) -> Option<Address> {
+        self.singleton.as_ref()?.instance(process)
+    }
 }
 
 /// Where the game's data lives.
 struct Game {
-    game_manager: MonoClass,
-    story_manager: MonoClass,
-    game_manager_instance: Option<Singleton>,
-    story_manager_instance: Option<Singleton>,
+    platform: &'static Platform,
+    game_manager: Manager,
+    story_manager: Manager,
+    statistics_manager: Manager,
     offsets: Offsets,
+    results_screens: Option<ResultsScreens>,
     retry_in: u32,
 }
 
 impl Game {
-    async fn attach(process: &Process, module: &Module, image: &Image) -> Self {
-        let mut reported = false;
-        let (game_manager, game_state_class, story_manager) = loop {
-            let find = |name| MonoClass::find(process, module, image, name);
-            match (find("GameManager"), find("GameState"), find("StoryManager")) {
-                (Some(gm), Some(gs), Some(sm)) => break (gm, gs, sm),
-                found => {
-                    if !reported {
-                        reported = true;
-                        print_message(&format!(
-                            "Waiting for classes: GameManager={} GameState={} StoryManager={}",
-                            found.0.is_some(),
-                            found.1.is_some(),
-                            found.2.is_some()
-                        ));
+    async fn attach(
+        process: &Process,
+        platform: &'static Platform,
+        module: &Module,
+        image: &Image,
+    ) -> Self {
+        let classes = Classes::find(process, platform, module, image).await;
+
+        let mut last_missing = None;
+        let offsets = loop {
+            match Offsets::find(process, platform, module, image, &classes) {
+                Ok(offsets) => break offsets,
+                Err(field) => {
+                    if last_missing != Some(field) {
+                        last_missing = Some(field);
+                        print_message(&format!("Waiting for field {field}"));
                     }
-                    wait_ticks(60).await;
+                    wait_ticks(TICK_RATE).await;
                 }
             }
         };
-
-        // `GameState` is a struct embedded in `GameManager`. Mono stores struct
-        // field offsets as if boxed (including the object header), so they are
-        // rebased onto the embedded copy. The ASL's paths agree:
-        // 0x38 + (0x1C - 8) = 0x4C for playedTime, and so on.
-        let game_state = field_or(process, &game_manager, "_gameState", 0x38);
-        let in_game_state = |name, known| {
-            game_state + field_or(process, &game_state_class, name, known) - OBJECT_HEADER
-        };
-        let offsets = Offsets {
-            is_transitioning: field_or(process, &game_manager, "_isTransitioning", 0x65),
-            played_time: in_game_state("playedTime", 0x1C),
-            current_scene: in_game_state("currentScene", 0xC),
-            base_camp_scene: in_game_state("baseCampScene", 0x18),
-            occurred_events: field_or(process, &story_manager, "ocurredEvents", 0x10),
-        };
         print_message("Classes found");
 
+        let results_screens = MonoClass::find(process, platform, module, image, "StatisticsShow")
+            .and_then(|show| {
+                ResultsScreens::find(process, platform, &classes.statistics_manager, show)
+            });
+        if results_screens.is_none() {
+            print_message("Statistics screens not found; the final split happens at Ended");
+        }
+
         Self {
-            game_manager,
-            story_manager,
-            game_manager_instance: None,
-            story_manager_instance: None,
+            platform,
+            game_manager: Manager::new(classes.game_manager),
+            story_manager: Manager::new(classes.story_manager),
+            statistics_manager: Manager::new(classes.statistics_manager),
             offsets,
+            results_screens,
             retry_in: 0,
         }
     }
 
+    fn managers(&mut self) -> [&mut Manager; 3] {
+        [
+            &mut self.game_manager,
+            &mut self.story_manager,
+            &mut self.statistics_manager,
+        ]
+    }
+
     /// The singletons can only be validated once they exist, so retry about
-    /// once a second until both are found.
+    /// once a second until all are found.
     fn resolve_singletons(&mut self, process: &Process) {
-        if self.game_manager_instance.is_some() && self.story_manager_instance.is_some() {
+        if self.managers().iter().all(|m| m.singleton.is_some()) {
             return;
         }
         if self.retry_in > 0 {
             self.retry_in -= 1;
             return;
         }
-        self.retry_in = 120;
-        if self.game_manager_instance.is_none() {
-            self.game_manager_instance = Singleton::resolve(process, &self.game_manager);
-        }
-        if self.story_manager_instance.is_none() {
-            self.story_manager_instance = Singleton::resolve(process, &self.story_manager);
+        self.retry_in = TICK_RATE;
+        for manager in self.managers() {
+            manager.resolve(process);
         }
     }
+}
+
+impl Classes {
+    async fn find(
+        process: &Process,
+        platform: &'static Platform,
+        module: &Module,
+        image: &Image,
+    ) -> Self {
+        const NAMES: [&str; 4] = [
+            "GameManager",
+            "GameState",
+            "StoryManager",
+            "StatisticsManager",
+        ];
+        let mut reported = false;
+        loop {
+            let found = NAMES.map(|name| MonoClass::find(process, platform, module, image, name));
+            if let [Some(game_manager), Some(game_state), Some(story_manager), Some(statistics_manager)] =
+                found
+            {
+                return Self {
+                    game_manager,
+                    game_state,
+                    story_manager,
+                    statistics_manager,
+                };
+            }
+            if !reported {
+                reported = true;
+                let status: Vec<_> = NAMES
+                    .iter()
+                    .zip(&found)
+                    .map(|(name, class)| format!("{name}={}", class.is_some()))
+                    .collect();
+                print_message(&format!("Waiting for classes: {}", status.join(" ")));
+            }
+            wait_ticks(60).await;
+        }
+    }
+}
+
+impl Offsets {
+    /// `Err` names the first field that couldn't be found.
+    fn find(
+        process: &Process,
+        platform: &'static Platform,
+        module: &Module,
+        image: &Image,
+        classes: &Classes,
+    ) -> Result<Self, &'static str> {
+        let header = platform.object_header();
+        // `known` is the original ASL's offset, only valid for the 32-bit
+        // Windows build.
+        let field = |class: &MonoClass, name: &'static str, known: u64| {
+            field_or(
+                process,
+                class,
+                name,
+                (!platform.is_64_bit()).then_some(known),
+            )
+            .ok_or(name)
+        };
+
+        // `GameState` is a struct embedded in `GameManager`. Mono stores struct
+        // field offsets as if boxed (including the object header), so they are
+        // rebased onto the embedded copy. The ASL's paths agree on 32-bit:
+        // 0x38 + (0x1C - 8) = 0x4C for playedTime, and so on.
+        let embedded = field(&classes.game_manager, "_gameState", 0x38)?;
+        let in_game_state =
+            |name, known| Ok(embedded + field(&classes.game_state, name, known)? - header);
+
+        let offsets = Self {
+            is_transitioning: field(&classes.game_manager, "_isTransitioning", 0x65)?,
+            played_time: in_game_state("playedTime", 0x1C)?,
+            current_scene: in_game_state("currentScene", 0xC)?,
+            base_camp_scene: in_game_state("baseCampScene", 0x18)?,
+            occurred_events: field(&classes.story_manager, "ocurredEvents", 0x10)?,
+            completion_time: completion_time_offset(
+                process,
+                platform,
+                module,
+                image,
+                &classes.statistics_manager,
+            ),
+        };
+        if offsets.completion_time.is_none() {
+            print_message("Completion time not found; the final split will use playedTime");
+        }
+        Ok(offsets)
+    }
+}
+
+/// `StatisticsManager._state.lastRunState.time`, relative to the instance.
+///
+/// `GameManager.BeatTheGame` unlocks `StoryEvent.Ended` and then raises
+/// `OnGameBeaten`, where `StatisticsManager` copies the current run (a struct,
+/// so the copy is frozen) into `lastRunState`. `StatisticsShow` displays that
+/// copy's `time` after the credits. Both `StatisticsState` and `RunState` are
+/// structs embedded in their parent, so their offsets are rebased.
+fn completion_time_offset(
+    process: &Process,
+    platform: &'static Platform,
+    module: &Module,
+    image: &Image,
+    statistics_manager: &MonoClass,
+) -> Option<u64> {
+    let header = platform.object_header();
+    let find = |class, field| {
+        MonoClass::find(process, platform, module, image, class)?.field_offset(process, field)
+    };
+    let state = statistics_manager.field_offset(process, "_state")?;
+    let last_run = find("StatisticsState", "lastRunState")?;
+    let time = find("RunState", "time")?;
+    Some(state + (last_run - header) + (time - header))
 }
 
 /// Values read from the game this tick.
@@ -258,32 +463,41 @@ struct State {
     is_transitioning: Watcher<bool>,
     /// Story events currently present in `StoryManager.ocurredEvents`.
     events: Vec<i32>,
+    /// The last completion time recorded by `StatisticsManager`.
+    completion_time: Option<f32>,
+    /// Started statistics screens showing a finished run; `None` if unreadable.
+    results_screens: Option<Vec<Address>>,
     /// Whether each value could be read last tick, for logging transitions.
     readable: [Option<bool>; 5],
 }
 
 impl State {
-    fn update(&mut self, process: &Process, game: &Game) {
+    fn update(&mut self, process: &Process, game: &mut Game) {
         let off = &game.offsets;
-        let game_manager = game
-            .game_manager_instance
-            .as_ref()
-            .and_then(|s| s.instance(process));
+        let p = game.platform;
+        let game_manager = game.game_manager.instance(process);
 
         // On a failed read (menus, loading) keep the last known value.
         let played_time =
             game_manager.and_then(|gm| process.read::<f32>(gm + off.played_time).ok());
-        let scene = game_manager.and_then(|gm| read_mono_string(process, gm + off.current_scene));
+        let scene = game_manager.and_then(|gm| p.read_string(process, gm + off.current_scene));
         let base_camp =
-            game_manager.and_then(|gm| read_mono_string(process, gm + off.base_camp_scene));
+            game_manager.and_then(|gm| p.read_string(process, gm + off.base_camp_scene));
         let is_transitioning =
             game_manager.and_then(|gm| process.read::<u8>(gm + off.is_transitioning).ok());
         let events = game
-            .story_manager_instance
-            .as_ref()
-            .and_then(|s| s.instance(process))
-            .and_then(|sm| read_ptr(process, sm + off.occurred_events))
-            .and_then(|set| read_hash_set_i32(process, set));
+            .story_manager
+            .instance(process)
+            .and_then(|sm| p.read_ptr(process, sm + off.occurred_events))
+            .and_then(|set| read_hash_set_i32(process, p, set));
+
+        let statistics_manager = game.statistics_manager.instance(process);
+        self.completion_time = statistics_manager
+            .zip(off.completion_time)
+            .and_then(|(st, offset)| process.read::<f32>(st + offset).ok());
+        self.results_screens = statistics_manager
+            .zip(game.results_screens.as_mut())
+            .and_then(|(st, screens)| screens.read(process, st));
 
         self.log_readable(0, "playedTime", played_time.is_some());
         self.log_readable(1, "currentScene", scene.is_some());
@@ -373,7 +587,9 @@ struct Run {
     seen_events: HashSet<i32>,
     visited_scenes: HashSet<String>,
     visited_camps: HashSet<String>,
-    credits_started_at: Option<f32>,
+    finale: Finale,
+    /// The time to end the run on, for the split being returned.
+    split_time: Option<f32>,
 }
 
 impl Run {
@@ -387,11 +603,13 @@ impl Run {
         if let Some(camp) = &state.base_camp.pair {
             run.visited_camps.insert(camp.current.clone());
         }
+        run.finale.last_completion = state.completion_time;
         run
     }
 
     fn should_split(&mut self, settings: &Settings, state: &State) -> bool {
         let mut split = false;
+        let mut ended_now = false;
 
         // Story events: split the first time each enabled event happens in this run.
         // Using a set (not the event count) means reloading a save never re-splits.
@@ -403,10 +621,10 @@ impl Run {
                 Some(name) => print_message(&format!("Event: {name} ({event:#x})")),
                 None => print_message(&format!("Unknown event: {event:#x}")),
             }
-            split |= settings.get_event_enabled(event);
-
-            if event == EVENT_ENDED && settings.split_end_credits {
-                self.credits_started_at = state.played_time();
+            if event == EVENT_ENDED {
+                ended_now = true; // handled by the final split below
+            } else {
+                split |= settings.get_event_enabled(event);
             }
         }
 
@@ -431,14 +649,160 @@ impl Run {
             }
         }
 
-        // Final split a fixed time after the credits start.
-        if let (Some(started), Some(now)) = (self.credits_started_at, state.played_time()) {
-            if now - started > END_CREDITS_DELAY {
-                self.credits_started_at = None;
+        if settings.get_event_enabled(EVENT_ENDED) {
+            if let Some(time) = self.finale.update(state, ended_now) {
+                self.split_time = Some(time);
                 split = true;
             }
         }
+        split
+    }
+}
 
+/// The final split: when the statistics screen appears after the credits,
+/// on the time it shows.
+///
+/// The scene calls `BeatTheGame` both when the credits start and when the
+/// statistics screen appears; each call copies the running play time into
+/// `lastRunState`, and the screen shows the second copy.
+#[derive(Default)]
+struct Finale {
+    phase: Phase,
+    /// Last `lastRunState.time` seen; the game rewrites it when it's beaten.
+    last_completion: Option<f32>,
+    /// Results screens that existed before the game was beaten (e.g. from an
+    /// earlier completion in this session); they don't trigger the final split.
+    known_screens: Vec<Address>,
+    /// Whether the results screens could ever be read.
+    screens_readable: bool,
+}
+
+#[derive(Default)]
+enum Phase {
+    /// The game hasn't been beaten.
+    #[default]
+    Playing,
+    /// `Ended` appeared for the first time this run; waiting (`ticks`) for
+    /// its completion time to be recorded.
+    Ended { ticks: u32 },
+    /// The game was beaten (the credits started) at `time`, `ticks` ago.
+    Beaten {
+        time: f32,
+        ticks: u32,
+        /// Ticks since the statistics screen appeared, while waiting for
+        /// the game to record the time it shows.
+        screen_ticks: Option<u32>,
+    },
+    /// The final split happened.
+    Done,
+}
+
+impl Phase {
+    fn beaten(time: f32) -> Self {
+        Self::Beaten {
+            time,
+            ticks: 0,
+            screen_ticks: None,
+        }
+    }
+}
+
+impl Finale {
+    /// The time to end the run on, once it's time for the final split.
+    fn update(&mut self, state: &State, ended_now: bool) -> Option<f32> {
+        let played_time = state.played_time();
+        // A completion time is fresh if it matches the play time right now:
+        // `BeatTheGame` copies the running time when the game is beaten. An
+        // older one (from beating this save before) doesn't match.
+        let fresh = |t: &f32| {
+            played_time.is_some_and(|p| p > NEW_GAME_WINDOW && *t > 0.0 && (p - t).abs() < 2.0)
+        };
+        let completion = state.completion_time;
+        let completion_changed = completion != self.last_completion;
+        self.last_completion = completion;
+        let screens = state.results_screens.as_deref();
+        self.screens_readable |= screens.is_some();
+
+        if let Phase::Playing | Phase::Ended { .. } = self.phase {
+            if ended_now {
+                self.phase = Phase::Ended { ticks: 0 };
+            }
+            if let Some(time) = completion.filter(|t| completion_changed && fresh(t)) {
+                print_message(&format!("Game beaten, completion time: {time:.3}s"));
+                self.phase = Phase::beaten(time);
+            } else if let Phase::Ended { ticks } = &mut self.phase {
+                *ticks += 1;
+                if *ticks >= COMPLETION_TIME_WAIT_TICKS {
+                    self.phase = match played_time {
+                        // The completion time can't be read: use the play time.
+                        Some(p) if completion.is_none() && p > NEW_GAME_WINDOW => {
+                            print_message(&format!("Game beaten, play time: {p:.3}s"));
+                            Phase::beaten(p)
+                        }
+                        _ => {
+                            print_message(
+                                "Ended was already in the loaded save; waiting for the game \
+                                 to be beaten",
+                            );
+                            Phase::Playing
+                        }
+                    };
+                }
+            }
+        }
+
+        let split = match &mut self.phase {
+            Phase::Playing | Phase::Ended { .. } => {
+                for &s in screens.into_iter().flatten() {
+                    if !self.known_screens.contains(&s) {
+                        self.known_screens.push(s);
+                    }
+                }
+                None
+            }
+            Phase::Beaten {
+                time,
+                ticks,
+                screen_ticks,
+            } => {
+                *ticks += 1;
+                let shown =
+                    screens.is_some_and(|s| s.iter().any(|s| !self.known_screens.contains(s)));
+                if shown {
+                    screen_ticks.get_or_insert(0);
+                }
+                if let Some(screen_ticks) = screen_ticks {
+                    *screen_ticks += 1;
+                    // The time the screen shows: a fresh copy of the play time,
+                    // made as it appears (allow a moment for it to be written).
+                    let shown_time = completion.filter(fresh);
+                    (shown_time.is_some() || *screen_ticks >= SCREEN_TIME_WAIT_TICKS).then(|| {
+                        let time = shown_time.unwrap_or(*time);
+                        print_message(&format!(
+                            "Statistics screen shown: final split at {time:.3}s"
+                        ));
+                        time
+                    })
+                } else {
+                    let reason =
+                        if !self.screens_readable && *ticks >= SCREENS_UNREADABLE_WAIT_TICKS {
+                            Some("Statistics screens can't be read: final split now")
+                        } else if *ticks >= RESULTS_SCREEN_TIMEOUT_TICKS {
+                            Some("Statistics screen not seen in time: final split")
+                        } else {
+                            None
+                        };
+                    reason.map(|reason| {
+                        print_message(reason);
+                        *time
+                    })
+                }
+            }
+            Phase::Done => None,
+        };
+        if split.is_some() {
+            self.phase = Phase::Done;
+        }
         split
     }
 }
@@ -458,63 +822,41 @@ fn update_game_time(settings: &Settings, state: &State) {
     }
 }
 
-// --- Raw Mono object layouts (32-bit) -------------------------------------
-//
-// MonoString: vtable 0x0, sync 0x4, length 0x8, chars 0xC
-// MonoArray:  vtable 0x0, sync 0x4, bounds 0x8, max_length 0xC, data 0x10
-// HashSet<T> (System.Core, Mono puts reference fields first):
-//     table 0x8, links 0xC, slots 0x10, comparer 0x14, si 0x18,
-//     touched 0x1C, empty_slot 0x20, count 0x24, threshold 0x28, generation 0x2C
+// HashSet<T> (System.Core). Mono puts reference fields first, then the ints:
+//     header, table, links, slots, comparer, si, touched, empty_slot, count, ...
+// i.e. on 32-bit: links 0xC, slots 0x10, touched 0x1C (count 0x24, as in the ASL).
 // Link: { int HashCode; int Next } — a slot is occupied when HashCode has HASH_FLAG.
 
-/// MonoObject header (vtable + sync) on 32-bit.
-const OBJECT_HEADER: u64 = 0x8;
-const STRING_LENGTH: u64 = 0x8;
-const STRING_CHARS: u64 = 0xC;
-const ARRAY_DATA: u64 = 0x10;
-const HASH_SET_LINKS: u64 = 0xC;
-const HASH_SET_SLOTS: u64 = 0x10;
-const HASH_SET_TOUCHED: u64 = 0x1C;
+/// `HashSet<T>` fields, in pointer-sized slots after the object header.
+/// `touched` is the first int, right after the five references.
+const HASH_SET_LINKS: u64 = 1;
+const HASH_SET_SLOTS: u64 = 2;
+const HASH_SET_TOUCHED: u64 = 5;
 const HASH_FLAG: i32 = i32::MIN;
-
-const MAX_STRING_LEN: usize = 128;
 const MAX_EVENTS: usize = 1024;
 
-/// Reads a `string` stored at `field`. `Some("")` for null, `None` if unreadable.
-fn read_mono_string(process: &Process, field: Address) -> Option<String> {
-    let string: Address = process.read::<Address32>(field).ok()?.into();
-    if string.is_null() {
-        return Some(String::new());
-    }
-    let len = process.read::<i32>(string + STRING_LENGTH).ok()?;
-    let len = usize::try_from(len).ok().filter(|&l| l <= MAX_STRING_LEN)?;
-    let mut buf = [0u16; MAX_STRING_LEN];
-    process
-        .read_into_slice(string + STRING_CHARS, &mut buf[..len])
-        .ok()?;
-    Some(String::from_utf16_lossy(&buf[..len]))
-}
-
 /// Reads the occupied slots of a Mono `HashSet<int-sized T>`.
-fn read_hash_set_i32(process: &Process, set: Address) -> Option<Vec<i32>> {
-    if set.is_null() {
-        return Some(Vec::new());
-    }
-    let touched = process.read::<i32>(set + HASH_SET_TOUCHED).ok()?;
+fn read_hash_set_i32(process: &Process, p: &Platform, set: Address) -> Option<Vec<i32>> {
+    let field = |i| p.object_header() + i * p.pointer_bytes();
+    let touched = process.read::<i32>(set + field(HASH_SET_TOUCHED)).ok()?;
     let touched = usize::try_from(touched).ok().filter(|&t| t <= MAX_EVENTS)?;
     if touched == 0 {
         return Some(Vec::new());
     }
 
-    let links: Address = process.read::<Address32>(set + HASH_SET_LINKS).ok()?.into();
-    let slots: Address = process.read::<Address32>(set + HASH_SET_SLOTS).ok()?.into();
+    let links = p.read_ptr(process, set + field(HASH_SET_LINKS))?;
+    let slots = p.read_ptr(process, set + field(HASH_SET_SLOTS))?;
 
     let mut link_buf = [[0i32; 2]; MAX_EVENTS];
     let mut slot_buf = [0i32; MAX_EVENTS];
     let link_buf = &mut link_buf[..touched];
     let slot_buf = &mut slot_buf[..touched];
-    process.read_into_slice(links + ARRAY_DATA, link_buf).ok()?;
-    process.read_into_slice(slots + ARRAY_DATA, slot_buf).ok()?;
+    process
+        .read_into_slice(links + p.array_data(), link_buf)
+        .ok()?;
+    process
+        .read_into_slice(slots + p.array_data(), slot_buf)
+        .ok()?;
 
     Some(
         link_buf
